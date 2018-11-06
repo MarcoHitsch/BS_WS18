@@ -7,17 +7,13 @@
 #include <sys/wait.h>
 #include <cstring>
 
-using std::string;
-using std::cin;
-using std::cout;
-using std::endl;
-using std::vector;
+using namespace std;
 
 vector<string> splitString(const string& input)
 {
-    std::istringstream ss{input};
-    using StrIt = std::istream_iterator<std::string>;
-    std::vector<std::string> container{StrIt{ss}, StrIt{}};
+    istringstream ss{input};
+    using StrIt = istream_iterator<string>;
+    vector<string> container{StrIt{ss}, StrIt{}};
     return container;
 }
 
@@ -26,68 +22,52 @@ void execMyProgram(std::vector<string> &inputVector) {
 
     for(int i = 0; i < inputVector.size(); i++)
         argv[i] = &inputVector[i][0u];
-    argv[inputVector.size()] = NULL;
+    argv[inputVector.size()] = NULL; // Null terminiertes Argumente Array
 
     int err = execvp(argv[0], argv);
     if(err != 0){
         cout << "Fehler beim ausführen!" << endl;
-        exit(-1);
     }
 }
-
 
 int main() {
     vector<string> inputVector{};
     string input{};
     int status{};
-    time_t t;
+    bool waitForProcess{true};
 
     cout << "BS Shell" << endl;
 
     while(true){
         getline(cin, input);
-        inputVector = splitString(input);
+        if(input == "")
+            continue;
 
-        // Logout criteria
+        inputVector = splitString(input);
+        waitForProcess = inputVector[inputVector.size() - 1] != "&";
+
+        // Logout Kriterium
         if(inputVector[0] == "logout"){
-            cout << "Wirklich ausloggen (Y/N)?";
+            cout << "Wirklich ausloggen (y/n)?";
             cin >> input;
-            if(input == "Y")
+            if(input == "y")
                 break;
             else
                 continue;
         }
 
-        //execMyProgram(inputVector);
-
+        // Neuer Prozess und Unterscheidung
         pid_t pid = fork();
-        if(pid == 0){ //    ChildProcess
+        if(pid == 0){               // ChildProcess
             execMyProgram(inputVector);
         }
-        else{
-            //wait(0);
-            cout << "Child done" << endl;
+        else{                       // ParentProcess
+            if(waitForProcess)
+                waitpid(pid, &status, 0);
+            else
+                cout << "Child process: " << pid << endl;
         }
-        /*
-        else do {
-            if ((pid = waitpid(pid, &status, WNOHANG)) == -1)
-                perror("wait() error");
-            else if (pid == 0) {
-                time(&t);
-                printf("child is still running at %s", ctime(&t));
-                sleep(1);
-            }
-            else {
-                if (WIFEXITED(status))
-                    printf("child exited with status of %d\n", WEXITSTATUS(status));
-                else puts("child did not exit successfully");
-            }
-        } while (pid == 0);
-         */
 
-    }
-    cout << "Done";
-
-
+    } // while(true)
     return 0;
 }
