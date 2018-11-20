@@ -94,7 +94,8 @@ void unlockProcess(bool fg){
     kill(currentForegroundPid, SIGCONT);
     if(fg){
         cout << "Aktiviere Prozess " << currentForegroundPid << " im FG" << endl;
-        waitpid(currentForegroundPid, &currentProcessStatus, 0);
+        pause();
+        // waitpid(currentForegroundPid, &currentProcessStatus, 0);
     }
     else{
         cout << "Aktiviere Prozess " << currentForegroundPid << " im BG" << endl;
