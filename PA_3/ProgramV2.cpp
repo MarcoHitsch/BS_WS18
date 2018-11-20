@@ -85,7 +85,7 @@ void signalHandler(int signum){
         case SIGCHLD:
             cout << "caught SIGCHLD" << endl;
             checkBackgroundProcesses();
-            waitpid(-1, &status, WNOHANG);
+            // waitpid(-1, &status, WNOHANG);
             break;
     }
 }
@@ -94,8 +94,8 @@ void unlockProcess(bool fg){
     kill(currentForegroundPid, SIGCONT);
     if(fg){
         cout << "Aktiviere Prozess " << currentForegroundPid << " im FG" << endl;
-        pause();
-        // waitpid(currentForegroundPid, &currentProcessStatus, 0);
+        // pause();
+        waitpid(currentForegroundPid, &currentProcessStatus, 0);
     }
     else{
         cout << "Aktiviere Prozess " << currentForegroundPid << " im BG" << endl;
