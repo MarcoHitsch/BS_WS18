@@ -4,19 +4,28 @@
 #include <unistd.h>
 #include <semaphore.h>
 #include <unistd.h>
+#include <queue>
 
 using namespace std;
+
+class Waitable{
+public:
+    sem_t* sem;
+    bool isReader;
+    Waitable(sem_t* psem, bool pisReader) : sem{psem}, isReader{pisReader} {};
+};
 
 vector<int> sharedResource{};
 vector<pthread_t> readerThreads{};
 vector<pthread_t> writerThreads{};
 
 pthread_mutex_t readerLock = PTHREAD_MUTEX_INITIALIZER;
-sem_t writerLock{};
+
+queue<Waitable*> waitQueue{};
+
 int currentlyReading{0};
 double delay{0};
 
-bool traceLog{false};
 
 void write(long writerNumber){
     cout << "Schreibe (" << writerNumber << ")" << endl;
@@ -37,13 +46,31 @@ void read(long readerNumber){
 void *writerMethod(void* tid){
     long writerNumber = (long)tid;
 
+    sem_t sem{};
+    sem_init(&sem, 0, 0);
+    Waitable waitable{&sem, false};
+
     while(1){
-        if(traceLog)        
-            cout << "Writer(" << writerNumber << ") wartet..."<< endl;
-        sem_wait(&writerLock);
+
+        waitQueue.push(&waitable); //Queue Lock
+        cout << "Writer(" << writerNumber << ") wartet" << endl;
+        sem_wait(&sem);
+
         write(writerNumber);
-        sem_post(&writerLock);
-	usleep(0.1*1000000);
+
+
+        //cout << "Befreie Reader..." << endl;
+        try{
+            Waitable* first = waitQueue.front();
+            while(first != nullptr && first->isReader){
+                sem_post(first->sem);
+                waitQueue.pop();
+                first = waitQueue.front();
+            }
+        }
+        catch(exception e){
+            cout << "Fehler beim befreien: " << e.what() << endl;
+        }
     }
     // pthread_exit(NULL);
 }
@@ -52,55 +79,53 @@ void *writerMethod(void* tid){
 void *readerMethod(void* tid){
     long readerNumber = (long)tid;
 
+    sem_t sem{};
+    sem_init(&sem, 0, 1);
+    Waitable waitable{&sem, true};
+
     while(1){
-        //cout << "Reader(" << readerNumber << ") wartet..." << endl;
+
+        waitQueue.push(&waitable);
+        cout << "Reader(" << readerNumber << ") wartet" << endl;
+        sem_wait(&sem);
+
+        //Kritischer Abschnitt, aktuell lesende inkrementieren
         pthread_mutex_lock(&readerLock);
         currentlyReading++;
-        if(traceLog)        
-            cout << currentlyReading << " lesen" << endl;
-        if(currentlyReading == 1){
-            if(traceLog)        
-                cout << "Reader(" << readerNumber << ") versucht WriterLock..." << endl;
-            sem_wait(&writerLock);
-            if(traceLog)        
-                cout << "Reader(" << readerNumber << ") setzt WriterLock..." << endl;
-        }
-
         pthread_mutex_unlock(&readerLock);
 
         read(readerNumber);
 
-        //cout << "Reader(" << readerNumber << ") wartet (fertig)..." << endl;
+        //Kritischer Abschnitt, aktuell lesende dekrementieren
+        //Writer unlocken
         pthread_mutex_lock(&readerLock);
         currentlyReading--;
-
-        if(traceLog)        
-            cout << currentlyReading << " lesen" << endl;
         if(currentlyReading == 0){
-            if(traceLog)        
-                cout << "Reader(" << readerNumber << ") versucht befreit WriterLock..." << endl;
-            sem_post(&writerLock);
-            if(traceLog)        
-                cout << "Reader(" << readerNumber << ") befreit WriterLock..." << endl;
+            try{
+                Waitable* first = waitQueue.front();
+                while(first != nullptr && !first->isReader){
+                    sem_post(first->sem);
+                    waitQueue.pop();
+                    first = waitQueue.front();
+                }
+            }
+            catch(exception e){
+                cout << "Fehler beim befreien: " << e.what() << endl;
+            }
         }
         pthread_mutex_unlock(&readerLock);
-	usleep(0.1*1000000);
     }
     // pthread_exit(NULL);
 }
 
 int main() {
 
-    int tracelog{0};
     int vectorSize{};
     unsigned int readerCount{};
     unsigned int writerCount{};
 
-    sem_init(&writerLock, 0, 1);
-
-    cout << "Resourceplatz Anzahl_Reader Anzahl_Writer Tracelog Delay" << endl;
-    cin >> vectorSize >> readerCount >> writerCount >> tracelog >> delay;
-    traceLog = (tracelog == 1);
+    cout << "Resourceplatz Anzahl_Reader Anzahl_Writer Delay" << endl;
+    cin >> vectorSize >> readerCount >> writerCount >> delay;
 
     srand(time(NULL));
     int status{};
